@@ -35,7 +35,7 @@ WINDOW = timedelta(hours=5)
 # USD per million tokens: input, output, cache read, cache write 5m, cache write 1h.
 # Only the ratios matter for nerf detection. Override with NERF_PRICES='{"opus":[...]}'.
 PRICES = {
-    "opus": [5.0, 25.0, 0.5, 6.25, 10.0],
+    "opus": [4.0, 20.0, 0.2, 5.0, 8.0],  # Opus 5.5
     "sonnet": [3.0, 15.0, 0.3, 3.75, 6.0],
     "haiku": [1.0, 5.0, 0.1, 1.25, 2.0],
 }
