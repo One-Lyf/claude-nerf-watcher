@@ -61,6 +61,17 @@ compared to baseline times its own plan's multiplier, so one baseline covers eve
 The chart marks each plan boundary. A Max window scoring 0.8x means it bought 80% of what
 the advertised multiplier implies.
 
+## Graph
+
+```
+python3 nerf.py graph            # writes ~/.nerf-watcher/graph.png
+python3 nerf.py graph out.png
+```
+
+Top panel: $ per 1% per window with the expected line for each plan. Bottom panel: each
+window's ratio to its plan's baseline, with the nerf flag line. Plan changes are marked.
+Needs matplotlib (`python3 -m pip install --user matplotlib`); everything else is stdlib.
+
 ## Configuration
 
 | Variable | Default | Meaning |

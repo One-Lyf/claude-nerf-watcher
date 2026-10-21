@@ -7,6 +7,7 @@ Stdlib only. Usage:
   python3 nerf.py report      table + chart of every scored window
   python3 nerf.py baseline FROM TO   pin the baseline to windows ending in [FROM, TO] (YYYY-MM-DD)
   python3 nerf.py plan DATE NAME [MULT]   record a plan change (pro, max5, max20, or NAME MULT)
+  python3 nerf.py graph [OUT.png]          line graph PNG (needs matplotlib; default ~/.nerf-watcher/graph.png)
 
 Metric: API-equivalent dollars of tokens used in a 5-hour window, divided by the window's
 utilization percent ("$ per 1%"). Tokens come from the transcripts Claude Code writes under
@@ -497,12 +498,70 @@ def cmd_plan(argv):
     cmd_report([])
 
 
+def cmd_graph(argv):
+    """Line graph PNG of every closed window. Needs matplotlib; the rest of the tool doesn't."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+    except ImportError:
+        die("graph needs matplotlib: python3 -m pip install --user matplotlib")
+    out = os.path.expanduser(argv[0]) if argv else os.path.join(HOME, "graph.png")
+    now = datetime.now(timezone.utc)
+    state = load_json(STATE, {})
+    windows = [w for w in score_windows(read_readings(), update_index(), now) if w["closed"]]
+    base = baseline(windows, state)
+    if not windows or not base:
+        die("nothing to graph yet: need scored windows and a baseline")
+    tz = datetime.now().astimezone().tzinfo
+    fig, (top, bot) = plt.subplots(2, 1, figsize=(9, 8), sharex=True)
+    segs = []  # break the lines at plan changes so a downgrade isn't drawn as a slide
+    for w in windows:
+        if not segs or segs[-1][-1].get("plan") != w.get("plan"):
+            segs.append([])
+        segs[-1].append(w)
+    for k, seg in enumerate(segs):
+        t = [w["reset"] for w in seg]
+        if seg[0].get("plan"):
+            top.annotate("%s (%gx)" % (seg[0]["plan"], seg[0]["mult"]), (t[0], 0.98), va="top",
+                         xycoords=("data", "axes fraction"), color="#c0392b")
+        top.plot(t, [w["per_pct"] for w in seg], "o-", color="#2a7ab0", label=None if k else "actual $ per 1%")
+        top.plot([t[0], t[-1]], [expected(seg[0], base)] * 2, "--", color="#999",
+                 label=None if k else "expected for plan")
+        bot.plot(t, [w["per_pct"] / expected(w, base) for w in seg], "o-", color="#27ae60",
+                 label=None if k else "vs expected for plan")
+    lo, hi = windows[0]["reset"], windows[-1]["reset"]
+    for p in state.get("plans", []):
+        at = parse_time(p["from"])
+        if lo < at <= hi:
+            for ax in (top, bot):
+                ax.axvline(at, color="#c0392b", lw=1)
+    bot.axhline(1, color="#555", lw=1, label="baseline (1.0x)")
+    bot.axhline(1 / THRESHOLD, color="#c0392b", ls=":", label="nerf flag (%.2fx)" % (1 / THRESHOLD))
+    bot.set_ylim(0, max(1.4, max(w["per_pct"] / expected(w, base) for w in windows) * 1.1))
+    top.set_ylim(0, max(max(w["per_pct"], expected(w, base)) for w in windows) * 1.2)
+    top.set_title("Work bought per 1% of the 5-hour limit")
+    top.set_ylabel("API-equivalent $ per 1%")
+    bot.set_ylabel("ratio to plan baseline")
+    for ax, loc in ((top, "center right"), (bot, "lower right")):
+        ax.legend(loc=loc)
+        ax.grid(alpha=.3)
+    bot.xaxis.set_major_locator(mdates.AutoDateLocator(tz=tz))
+    bot.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d", tz=tz))
+    fig.text(0.01, 0.005, "baseline %.2f $/1%% per 1x of plan (median of %d windows, %s)" % (
+        base["value"], base["n"], base["from"]), fontsize=8, color="#555")
+    fig.tight_layout(rect=(0, 0.02, 1, 1))
+    fig.savefig(out, dpi=130)
+    print(out)
+
+
 def main(argv):
     os.makedirs(HOME, exist_ok=True)
     cmds = {"tick": cmd_tick, "backfill": cmd_backfill, "report": cmd_report, "baseline": cmd_baseline,
-            "plan": cmd_plan}
+            "plan": cmd_plan, "graph": cmd_graph}
     if not argv or argv[0] not in cmds:
-        die("usage: nerf.py tick|backfill|report|baseline FROM TO|plan DATE NAME [MULT]")
+        die("usage: nerf.py tick|backfill|report|baseline FROM TO|plan DATE NAME [MULT]|graph [OUT.png]")
     cmds[argv[0]](argv[1:])
 
 

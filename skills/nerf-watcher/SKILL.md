@@ -34,6 +34,8 @@ routine checks cost no extra tokens.
 - `nerf.py plan 2026-10-11 pro`: record a plan change (pro, max5, max20, or NAME MULT) so a
   downgrade or upgrade is not read as a nerf. `nerf.py plan` lists them.
 - `nerf.py report`: full table and current verdict.
+- `nerf.py graph [OUT.png]`: line graph of $/1% and ratio vs plan baseline, plan changes
+  marked (default `~/.nerf-watcher/graph.png`). Needs matplotlib. Send the PNG to the user.
 
 ## Read the result with care
 
