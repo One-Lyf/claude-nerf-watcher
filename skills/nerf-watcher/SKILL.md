@@ -31,6 +31,8 @@ routine checks cost no extra tokens.
 
 - `nerf.py backfill`: rebuild past readings from transcripts (meter outputs Claude saw).
 - `nerf.py baseline 2026-10-16 2026-10-19`: pin the baseline to a known-normal stretch.
+- `nerf.py plan 2026-10-11 pro`: record a plan change (pro, max5, max20, or NAME MULT) so a
+  downgrade or upgrade is not read as a nerf. `nerf.py plan` lists them.
 - `nerf.py report`: full table and current verdict.
 
 ## Read the result with care

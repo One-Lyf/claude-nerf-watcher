@@ -6,6 +6,7 @@ Stdlib only. Usage:
   python3 nerf.py backfill    rebuild past readings from Claude Code transcripts
   python3 nerf.py report      table + chart of every scored window
   python3 nerf.py baseline FROM TO   pin the baseline to windows ending in [FROM, TO] (YYYY-MM-DD)
+  python3 nerf.py plan DATE NAME [MULT]   record a plan change (pro, max5, max20, or NAME MULT)
 
 Metric: API-equivalent dollars of tokens used in a 5-hour window, divided by the window's
 utilization percent ("$ per 1%"). Tokens come from the transcripts Claude Code writes under
@@ -225,12 +226,33 @@ def score_windows(readings, msgs, now):
     return out
 
 
+PLAN_MULT = {"pro": 1, "max5": 5, "max20": 20}  # 5h limit relative to Pro
+
+
+def tag_plans(windows, state):
+    """Give each window the plan in effect when it ended. Before the first recorded plan,
+    assume the first one. No plans recorded: every window is 1x."""
+    plans = sorted((parse_time(p["from"]), p["name"], p["mult"]) for p in state.get("plans", []))
+    for w in windows:
+        cur = plans[0] if plans else (None, None, 1)
+        for p in plans:
+            if p[0] <= w["reset"]:
+                cur = p
+        w["plan"], w["mult"] = cur[1], cur[2]
+
+
+def expected(w, base):
+    return base["value"] * w.get("mult", 1)
+
+
 def baseline(windows, state):
+    tag_plans(windows, state)
     b = state.get("baseline")
     if not b:
         return None
     lo, hi = parse_time(b["from"]), parse_time(b["to"])
-    vals = sorted(w["per_pct"] for w in windows if w["closed"] and lo <= w["reset"] <= hi)
+    # normalized to a 1x plan, so a baseline taken on any plan applies to every plan
+    vals = sorted(w["per_pct"] / w["mult"] for w in windows if w["closed"] and lo <= w["reset"] <= hi)
     if not vals:
         return None
     mid = len(vals) // 2
@@ -250,8 +272,12 @@ def mix_line(mix_dollars):
 
 def chart(windows, base, n=12):
     lines = ["window ends      used   $/1%  vs base"]
+    prev = None
     for w in windows[-n:]:
-        ratio = w["per_pct"] / base["value"] if base else None
+        if w.get("plan") and w["plan"] != prev:
+            lines.append("---- plan: %s (%gx) ----" % (w["plan"], w["mult"]))
+        prev = w.get("plan")
+        ratio = w["per_pct"] / expected(w, base) if base else None
         bar = ""
         if ratio is not None:
             width = min(int(round(ratio * 20)), 40)
@@ -262,6 +288,8 @@ def chart(windows, base, n=12):
     if base:
         lines.append("'|' = baseline %.2f $/1%% (median of %d windows, %s)" % (
             base["value"], base["n"], base["from"]))
+        if any(w.get("mult", 1) != 1 for w in windows[-n:]):
+            lines.append("baseline is per 1x of plan; each window's bar is scaled by its plan multiplier")
     return "\n".join(lines)
 
 
@@ -270,7 +298,7 @@ def verdict(windows, base):
     if not base or len(closed) < STREAK:
         return None
     recent = closed[-STREAK:]
-    if all(w["per_pct"] < base["value"] / THRESHOLD for w in recent):
+    if all(w["per_pct"] < expected(w, base) / THRESHOLD for w in recent):
         return recent
     return None
 
@@ -281,8 +309,8 @@ def feedback_block(recent, base):
         base["value"], base["n"], base["from"],
         "  ".join("%s %d%%" % (k, round(100 * v)) for k, v in base["mix"].items())))
     for w in recent:
-        lines.append("window ending %s: %.0f%% used, %.2f $/1%% (%.2fx baseline), tokens %s, mix: %s, models %s" % (
-            w["reset"].isoformat(), w["used"], w["per_pct"], w["per_pct"] / base["value"],
+        lines.append("window ending %s (plan %s): %.0f%% used, %.2f $/1%% (%.2fx baseline), tokens %s, mix: %s, models %s" % (
+            w["reset"].isoformat(), w.get("plan") or "unset", w["used"], w["per_pct"], w["per_pct"] / expected(w, base),
             json.dumps(w["tokens"]), mix_line(w["mix"]), ", ".join(sorted(w["models"]))))
     lines.append("method: tokens from local Claude Code transcripts weighted by public API prices, "
                  "divided by 5h utilization from the usage endpoint.")
@@ -446,11 +474,35 @@ def cmd_baseline(argv):
     cmd_report([])
 
 
+def cmd_plan(argv):
+    if not argv:
+        state = load_json(STATE, {})
+        for p in sorted(state.get("plans", []), key=lambda p: p["from"]):
+            print("%s  %s (%gx)" % (p["from"][:10], p["name"], p["mult"]))
+        return
+    if len(argv) < 2 or (len(argv) < 3 and argv[1] not in PLAN_MULT):
+        die("usage: nerf.py plan YYYY-MM-DD %s|NAME MULT" % "|".join(PLAN_MULT))
+    try:
+        start = datetime.fromisoformat(argv[0]).astimezone()
+        mult = float(argv[2]) if len(argv) > 2 else PLAN_MULT[argv[1]]
+    except ValueError as e:
+        die("bad plan: %s" % e)
+    if mult <= 0:
+        die("plan multiplier must be positive")
+    state = load_json(STATE, {})
+    plans = [p for p in state.get("plans", []) if p["from"][:10] != start.date().isoformat()]
+    plans.append({"from": start.isoformat(), "name": argv[1], "mult": mult})
+    state["plans"] = sorted(plans, key=lambda p: p["from"])
+    save_json(STATE, state)
+    cmd_report([])
+
+
 def main(argv):
     os.makedirs(HOME, exist_ok=True)
-    cmds = {"tick": cmd_tick, "backfill": cmd_backfill, "report": cmd_report, "baseline": cmd_baseline}
+    cmds = {"tick": cmd_tick, "backfill": cmd_backfill, "report": cmd_report, "baseline": cmd_baseline,
+            "plan": cmd_plan}
     if not argv or argv[0] not in cmds:
-        die("usage: nerf.py tick|backfill|report|baseline FROM TO")
+        die("usage: nerf.py tick|backfill|report|baseline FROM TO|plan DATE NAME [MULT]")
     cmds[argv[0]](argv[1:])
 
 

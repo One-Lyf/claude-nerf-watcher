@@ -44,6 +44,23 @@ python3 ~/.claude/skills/nerf-watcher/nerf.py baseline 2026-10-01 2026-10-07
 Backfill finds meter readings Claude saw in past sessions. Pick baseline dates you trust
 were normal. After that, ask Claude to "check usage", or run `nerf.py tick` yourself.
 
+## Plan changes
+
+A Max plan has a bigger 5-hour limit, so each 1% buys more. Record plan changes so an
+upgrade or downgrade doesn't read as a nerf:
+
+```
+python3 nerf.py plan 2026-10-01 max5
+python3 nerf.py plan 2026-10-11 pro
+python3 nerf.py plan                 # list recorded plans
+```
+
+Built-in multipliers: `pro` 1, `max5` 5, `max20` 20. For anything else pass one:
+`plan 2026-11-01 team 1.25`. The baseline is stored per 1x of plan, and each window is
+compared to baseline times its own plan's multiplier, so one baseline covers every plan.
+The chart marks each plan boundary. A Max window scoring 0.8x means it bought 80% of what
+the advertised multiplier implies.
+
 ## Configuration
 
 | Variable | Default | Meaning |
