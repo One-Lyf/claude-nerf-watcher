@@ -374,7 +374,8 @@ def transcript_readings():
             cmds = {}
             with f:
                 for raw in f:
-                    if b"usage" not in raw:
+                    # Meter results may not repeat the word "usage"; keep any result once a meter ran.
+                    if b"usage" not in raw and not (cmds and b"tool_result" in raw):
                         continue
                     try:
                         d = json.loads(raw)
