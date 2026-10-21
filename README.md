@@ -25,6 +25,7 @@ verdict: normal (no 2-window streak below 0.67x baseline)
   [claude-usage-pacer](https://github.com/One-Lyf/claude-usage-pacer).
 - **Score:** each window starts at 0%, so `$ per 1% = tokens since window start / percent used`.
   One reading late in a window is enough.
+- **Hands-off on a flag:** Claude drafts the /feedback report, sends the graph and pings your phone. You approve the send (Claude Code requires that one tap).
 - **Cheap by design:** `tick` appends one line to a log. A chart prints only when a 5-hour
   window has closed.
 

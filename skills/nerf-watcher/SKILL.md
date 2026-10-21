@@ -23,9 +23,17 @@ routine checks cost no extra tokens.
 
 ## On a SUSPECTED NERF verdict
 
-1. Tell the user, quoting the chart's last rows and the `SUSPECTED NERF` block.
-2. Draft a report with the SendFeedback tool: type `bug`, title "Plan usage per token
-   dropped vs baseline", and the block's lines as Evidence. The user approves sending.
+Act at once, without asking first. The user wants this as automated as possible.
+
+1. Draft the report with the SendFeedback tool right away: type `bug`, title "Plan usage
+   per token dropped vs baseline", and the block's lines as Evidence. Sending to Anthropic
+   still needs the user's one approval; that step can't be skipped, so make the draft ready
+   to approve as-is.
+2. Run `nerf.py graph` and send the PNG to the user (SendUserFile, if available).
+3. If a push-notification tool is available, notify the user's phone: "Suspected nerf:
+   feedback draft ready to approve."
+4. In chat, quote the chart's last rows and the `SUSPECTED NERF` block, and say the draft
+   is waiting for approval.
 
 ## Setup and review
 
