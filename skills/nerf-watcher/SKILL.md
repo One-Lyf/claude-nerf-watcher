@@ -53,6 +53,8 @@ Act at once, without asking first. The user wants this as automated as possible.
 - Usage this machine can't see inflates utilization without adding tokens: claude.ai, the
   desktop or mobile apps chatting directly, cloud sessions, other computers. Any of those
   can look like a nerf.
+- Cache writes are priced at one rate regardless of TTL, and each window also shows raw
+  tokens per 1% (`Ktok/1%`). Before quoting a plan-vs-plan ratio, check both agree.
 - A big shift in the token mix (shown per window) can move the number too, since the true
   plan weighting of cache tokens is unknown.
 - Never read the credentials file or Keychain. The meter handles auth.

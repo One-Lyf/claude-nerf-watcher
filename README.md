@@ -5,12 +5,12 @@ each 1% of your 5-hour limit actually buys, compares it to your own baseline, an
 when it drops.
 
 ```
-window ends      used   $/1%  vs base
-10-18 12:50 AM    92%    0.28  0.98x ####################|
-10-18 1:50 PM     30%    0.31  1.09x ####################|##
-10-19 11:50 AM    86%    0.21  0.72x ##############      |
-10-20 8:00 PM     93%    0.26  0.92x ##################  |
-'|' = baseline 0.29 $/1% (median of 8 windows, 2026-10-16 to 2026-10-19)
+window ends      used   $/1%  Ktok/1%  vs base
+10-18 12:50 AM    92%    0.14      303  0.98x ####################|
+10-18 1:50 PM     30%    0.16      364  1.05x ####################|#
+10-19 11:50 AM    86%    0.10      213  0.71x ##############      |
+10-20 8:00 PM     96%    0.14      313  0.98x ####################|
+'|' = baseline 0.15 $/1% (median of 8 windows, 2026-10-16 to 2026-10-19)
 verdict: normal (no 2-window streak below 0.67x baseline)
 ```
 
@@ -20,7 +20,12 @@ verdict: normal (no 2-window streak below 0.67x baseline)
   `~/.claude/projects`, subagents included. Each message is counted once.
 - **Weighting:** tokens are priced at public API rates (input, output, cache read, cache
   write) so a cache read doesn't count the same as an output token. The result is
-  "API-equivalent dollars". Only the ratios matter.
+  "API-equivalent dollars". Only the ratios matter. Every cache write is priced at the 5-minute
+  rate: a 1-hour TTL is a caching choice, not more work, and pricing it higher skews comparisons
+  between periods with different TTL use (it once made Max 5x read as 4x Pro when raw tokens
+  showed about 5x). `NERF_TTL_PRICING=1` restores API pricing.
+- **Raw tokens:** each window also prints thousands of raw tokens per 1% (`Ktok/1%`) as an
+  unweighted cross-check. Check it before quoting a plan ratio.
 - **Utilization:** the 5-hour percent from
   [claude-usage-pacer](https://github.com/One-Lyf/claude-usage-pacer).
 - **Score:** each window starts at 0%, so `$ per 1% = tokens since window start / percent used`.
@@ -82,6 +87,7 @@ Needs matplotlib (`python3 -m pip install --user matplotlib`); everything else i
 | `NERF_MIN_UTIL` | 10 | Skip windows under this % (too coarse) |
 | `NERF_HOME` | `~/.nerf-watcher` | Log and state directory |
 | `NERF_USAGE_CMD` | usage-pacer `--json` | Any command printing usage JSON |
+| `NERF_TTL_PRICING` | off | `1` prices 1h cache writes at the API's higher rate |
 | `NERF_PRICES` | built-in | JSON of per-family `[in, out, cache read, write 5m, write 1h]` $/MTok |
 
 ## Caveats

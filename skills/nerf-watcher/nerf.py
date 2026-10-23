@@ -12,7 +12,8 @@ Stdlib only. Usage:
 Metric: API-equivalent dollars of tokens used in a 5-hour window, divided by the window's
 utilization percent ("$ per 1%"). Tokens come from the transcripts Claude Code writes under
 ~/.claude/projects, weighted by public API prices so input, output and cache tokens count
-at their real relative cost. If $ per 1% falls well below baseline, each percent of the
+at their real relative cost (every cache write at the 5m rate: TTL is not more work). Raw
+tokens per 1% print alongside as a cross-check. If $ per 1% falls well below baseline, each percent of the
 plan is buying less work: a possible nerf.
 """
 import json
@@ -40,6 +41,10 @@ PRICES = {
     "haiku": [1.0, 5.0, 0.1, 1.25, 2.0],
 }
 PRICES.update(json.loads(os.environ.get("NERF_PRICES", "{}")))
+# 1h-TTL cache writes cost more on the API, but the TTL is a caching choice, not more work.
+# Pricing them higher made periods with more 1h writes look richer than they were, so by
+# default every cache write is priced at the 5m rate. NERF_TTL_PRICING=1 restores API pricing.
+TTL_PRICING = os.environ.get("NERF_TTL_PRICING") == "1"
 KINDS = ["input", "output", "cache_read", "cache_write"]
 
 READINGS = os.path.join(HOME, "readings.jsonl")
@@ -195,7 +200,7 @@ def tally(msgs, start, end):
             continue
         p = PRICES[fam]
         parts = {"input": (i, i * p[0]), "output": (o, o * p[1]), "cache_read": (cr, cr * p[2]),
-                 "cache_write": (cw5 + cw1, cw5 * p[3] + cw1 * p[4])}
+                 "cache_write": (cw5 + cw1, cw5 * p[3] + cw1 * (p[4] if TTL_PRICING else p[3]))}
         for k, (n, cost) in parts.items():
             tokens[k] += n
             dollars[k] += cost / 1e6
@@ -223,7 +228,7 @@ def score_windows(readings, msgs, now):
         if total <= 0:
             continue
         out.append({"reset": reset, "closed": reset <= now, "used": used, "dollars": total,
-                    "per_pct": total / used, "mix": dollars, "tokens": tokens, "models": models, "src": src})
+                    "per_pct": total / used, "tok_pct": sum(tokens.values()) / used, "mix": dollars, "tokens": tokens, "models": models, "src": src})
     return out
 
 
@@ -272,7 +277,7 @@ def mix_line(mix_dollars):
 
 
 def chart(windows, base, n=12):
-    lines = ["window ends      used   $/1%  vs base"]
+    lines = ["window ends      used   $/1%  Ktok/1%  vs base"]
     prev = None
     for w in windows[-n:]:
         if w.get("plan") and w["plan"] != prev:
@@ -283,8 +288,8 @@ def chart(windows, base, n=12):
         if ratio is not None:
             width = min(int(round(ratio * 20)), 40)
             bar = ("#" * width).ljust(20)[:20] + "|" + "#" * max(width - 20, 0)
-        lines.append("%-15s %4d%%  %6.2f  %s %s" % (
-            local(w["reset"]), w["used"], w["per_pct"],
+        lines.append("%-15s %4d%%  %6.2f  %7.0f  %s %s" % (
+            local(w["reset"]), w["used"], w["per_pct"], w["tok_pct"] / 1e3,
             ("%.2fx" % ratio) if ratio is not None else "  -  ", bar))
     if base:
         lines.append("'|' = baseline %.2f $/1%% (median of %d windows, %s)" % (
@@ -313,8 +318,9 @@ def feedback_block(recent, base):
         lines.append("window ending %s (plan %s): %.0f%% used, %.2f $/1%% (%.2fx baseline), tokens %s, mix: %s, models %s" % (
             w["reset"].isoformat(), w.get("plan") or "unset", w["used"], w["per_pct"], w["per_pct"] / expected(w, base),
             json.dumps(w["tokens"]), mix_line(w["mix"]), ", ".join(sorted(w["models"]))))
-    lines.append("method: tokens from local Claude Code transcripts weighted by public API prices, "
-                 "divided by 5h utilization from the usage endpoint.")
+    lines.append("method: tokens from local Claude Code transcripts weighted by public API prices "
+                 "(cache writes at one rate regardless of TTL), divided by 5h utilization from the usage endpoint. "
+                 "Raw tokens per 1%% shown alongside.")
     return "\n".join(lines)
 
 
